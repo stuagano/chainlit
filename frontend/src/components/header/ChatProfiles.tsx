@@ -37,29 +37,32 @@ export default function ChatProfiles({ navigate }: Props) {
   const [newChatProfile, setNewChatProfile] = useState<string | null>(null);
   const [openDialog, setOpenDialog] = useState(false);
 
+  const chatProfiles = config?.chatProfiles ?? [];
+  const hasMultipleChatProfiles = chatProfiles.length > 1;
+
   // Early return check to prevent unnecessary renders and resource waste
-  if (!config?.chatProfiles?.length || config.chatProfiles.length <= 1) {
+  if (!hasMultipleChatProfiles) {
     return null;
   }
 
   // Handle case when no profile is selected
   useEffect(() => {
-    if (!chatProfile) {
-      setChatProfile(config.chatProfiles[0].name);
+    if (!chatProfile && chatProfiles.length) {
+      setChatProfile(chatProfiles[0].name);
     }
-  }, [chatProfile, config.chatProfiles, setChatProfile]);
+  }, [chatProfile, chatProfiles, setChatProfile]);
 
   // Handle case when selected profile becomes invalid
   useEffect(() => {
-    if (chatProfile) {
-      const profileExists = config.chatProfiles.some(
+    if (chatProfile && chatProfiles.length) {
+      const profileExists = chatProfiles.some(
         (profile) => profile.name === chatProfile
       );
       if (!profileExists) {
-        setChatProfile(config.chatProfiles[0].name);
+        setChatProfile(chatProfiles[0].name);
       }
     }
-  }, [chatProfile, config.chatProfiles, setChatProfile]);
+  }, [chatProfile, chatProfiles, setChatProfile]);
 
   const handleClose = () => {
     setOpenDialog(false);
@@ -97,7 +100,7 @@ export default function ChatProfiles({ navigate }: Props) {
           <SelectValue placeholder="Select profile" />
         </SelectTrigger>
         <SelectContent>
-          {config.chatProfiles.map((profile) => {
+          {chatProfiles.map((profile) => {
             const icon = profile.icon?.includes('/public')
               ? apiClient.buildEndpoint(profile.icon)
               : profile.icon;

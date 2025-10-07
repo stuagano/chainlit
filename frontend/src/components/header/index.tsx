@@ -7,6 +7,7 @@ import AudioPresence from '@/components/AudioPresence';
 import ButtonLink from '@/components/ButtonLink';
 import { useSidebar } from '@/components/ui/sidebar';
 
+import AgentEditorButton from './AgentEditorButton';
 import ApiKeys from './ApiKeys';
 import ChatProfiles from './ChatProfiles';
 import NewChatButton from './NewChat';
@@ -61,6 +62,7 @@ const Header = memo(() => {
 
       <div />
       <div className="flex items-center gap-1">
+        <AgentEditorButton />
         <ShareButton />
         <ReadmeButton />
         <ApiKeys />

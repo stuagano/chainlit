@@ -22,15 +22,37 @@ export default function AppWrapper() {
     i18n.changeLanguage(languageInUse);
   }
 
-  const { data: translations } = useApi<any>(
-    `/project/translations?language=${languageInUse}`
-  );
+  const {
+    data: translations,
+    error: translationsError,
+    isLoading: translationsLoading
+  } = useApi<any>(`/project/translations?language=${languageInUse}`, {
+    shouldRetryOnError: false
+  });
 
   useEffect(() => {
     if (!translations) return;
     handleChangeLanguage(translations.translation);
     setTranslationLoaded(true);
-  }, [translations]);
+  }, [translations, languageInUse]);
+
+  useEffect(() => {
+    if (!translationsError) return;
+    console.warn(
+      'Failed to load project translations. Falling back to bundled copy.',
+      translationsError
+    );
+    setTranslationLoaded(true);
+  }, [translationsError]);
+
+  useEffect(() => {
+    if (translationLoaded || translationsLoading || translations) {
+      return;
+    }
+
+    // No translations were returned, but the request completed successfully.
+    setTranslationLoaded(true);
+  }, [translationLoaded, translations, translationsLoading]);
 
   useEffect(() => {
     const handleWindowMessage = (event: MessageEvent) => {
