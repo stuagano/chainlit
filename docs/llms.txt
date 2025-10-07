@@ -1,5 +1,6 @@
-Chainlit ships with adapters for multiple LLM providers. Keep provider credentials in your shared `.env` files and sync them to
-GCP Secret Manager so they can be mounted in Cloud Run, Cloud Functions, and Cloud Build without duplication.
+Chainlit ships with adapters for multiple LLM providers. Keep provider credentials in your shared `.env` files (see
+[`.env.example`](../.env.example)) and sync them to GCP Secret Manager so they can be mounted in Cloud Run, Cloud Functions, and
+Cloud Build without duplication.
 
 Recommended environment variables:
 - `OPENAI_API_KEY`
@@ -10,5 +11,12 @@ Recommended environment variables:
 - `AZURE_OPENAI_ENDPOINT`
 - `AZURE_OPENAI_KEY`
 
-Load these via tooling such as `direnv` or `dotenvx` locally. In production, attach the same secrets via Secret Manager or Config
-Connector to stay DRY across environments.
+Load these via tooling such as `direnv` or `dotenvx` locally. The
+[`scripts/start_local.py`](../scripts/start_local.py) helper reads this
+inventory, reuses any values already exported in your shell, and prompts only
+for missing entries so the configuration stays DRY. Pass `--non-interactive`
+when you want automated jobs to accept defaults while still warning about empty
+secrets. Mirror the populated `.env` to GCP with
+[`scripts/sync_env_to_gcp.py`](../scripts/sync_env_to_gcp.py) so Secret Manager,
+Cloud Build, and GitHub Actions load the exact same credentials without
+duplication.

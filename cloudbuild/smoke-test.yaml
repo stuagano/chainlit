@@ -1,0 +1,43 @@
+# Run the shared smoke test inside Cloud Build using the same helper scripts as local developers.
+
+timeout: 1800s
+
+substitutions:
+  _CHAINLIT_SECRET_NAME: chainlit-env
+
+steps:
+  - id: "Run smoke test"
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    env:
+      - CLOUDSDK_CORE_PROJECT=${PROJECT_ID}
+    args:
+      - -c
+      - |
+        set -euxo pipefail
+
+        if [ -z "${CHAINLIT_ENV_CONTENT:-}" ]; then
+          echo "Secret ${_CHAINLIT_SECRET_NAME} is empty or unavailable" >&2
+          exit 1
+        fi
+
+        printf '%s' "$CHAINLIT_ENV_CONTENT" > .env
+
+        apt-get update
+        DEBIAN_FRONTEND=noninteractive apt-get install -y curl python3 python3-pip python3-venv build-essential
+
+        curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+        DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs
+
+        corepack enable
+        corepack prepare pnpm@9 --activate
+
+        python3 -m pip install --upgrade pip
+        python3 -m pip install uv
+
+        python3 scripts/smoke_test.py
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/${PROJECT_ID}/secrets/${_CHAINLIT_SECRET_NAME}/versions/latest
+      env: CHAINLIT_ENV_CONTENT
