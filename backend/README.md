@@ -107,6 +107,35 @@ chainlit run demo.py -w
 
 You can find various examples of Chainlit apps [here](https://github.com/Chainlit/cookbook) that leverage tools and services such as OpenAI, Anthropiс, LangChain, LlamaIndex, ChromaDB, Pinecone and more.
 
+### 🌟 Google Gemini, Vertex AI & ADK support
+
+Chainlit now ships with first-class support for the official [Google GenAI SDK](https://ai.google.dev/gemini-api/docs) so you can build Gemini or Vertex AI agents without additional glue code. Install `google-genai` (or the legacy `google-generativeai`) alongside your Chainlit app and call:
+
+```python
+import chainlit as cl
+import os
+
+cl.instrument_google_genai()
+
+from google import genai
+
+client = genai.Client(
+    api_key=os.environ.get("GEMINI_API_KEY"),
+    # or: project=os.environ["VERTEX_PROJECT_ID"], location="us-central1"
+)
+
+response = client.responses.generate(
+    model="models/gemini-1.5-flash",
+    contents="Draft a warm welcome message for new users",
+)
+
+@cl.on_message
+async def on_message(message: cl.Message):
+    await cl.Message(content=response.output_text).send()
+```
+
+Every SDK call (including Agent Developer Kit `client.agents.*` helpers) automatically appears as an LLM step inside the Chainlit UI, capturing prompts, outputs, timing information and metadata. Require `GEMINI_API_KEY`, `VERTEX_PROJECT_ID`, or other credentials from your end users via `config.toml`'s `user_env` list to collect them securely at runtime.
+
 Tell us what you would like to see added in Chainlit using the Github issues or on [Discord](https://discord.gg/k73SQ3FyUh).
 
 ## 💁 Contributing
