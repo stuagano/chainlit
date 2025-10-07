@@ -48,6 +48,15 @@ chainlit hello
 
 If this opens the `hello app` in your browser, you're all set!
 
+## 🗂️ Documentation inventory
+
+| File | Purpose |
+| --- | --- |
+| [`README.md`](README.md) | High-level project overview and quickstart commands. |
+| [`docs/local-setup.md`](docs/local-setup.md) | Minimal smoke test to validate local installs using shared `.env` values and reproducible package managers. |
+| [`docs/llms.txt`](docs/llms.txt) | Checklist of LLM provider environment variables to keep in centralized secrets (locally via `.env`, in production via GCP Secret Manager). |
+| [`AGENTS.md`](AGENTS.md) | Guidance for AI contributors to keep workflows DRY and aligned with GCP deployment practices. |
+
 ### Development version
 
 The latest in-development version can be installed straight from GitHub with:
