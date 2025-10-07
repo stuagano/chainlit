@@ -48,14 +48,37 @@ chainlit hello
 
 If this opens the `hello app` in your browser, you're all set!
 
+
+### Bootstrap the local monorepo
+
+Clone this repository and populate the shared `.env` file before running any of the smoke tests:
+
+```sh
+python3 scripts/start_local.py --smoke-test
+```
+
+The helper script mirrors [`docs/local-setup.md`](../docs/local-setup.md) by:
+
+1. Reading the credential inventory from [`.env.example`](../.env.example) so API keys remain DRY across developers and CI.
+2. Reusing any values already set in `.env` or exported in your shell, prompting only for the remainder (press <kbd>Enter</kbd> to keep documented defaults or leave them blank). Pass `--non-interactive` to skip prompts entirely in automation while still surfacing any empty secrets at the end.
+3. Running [`scripts/smoke_test.py`](../scripts/smoke_test.py) when invoked with `--smoke-test` so the repository matches the documented workflow across local shells, GitHub Actions, and Cloud Build. The helper waits for `chainlit hello --ci --headless` to report readiness, verifies it serves HTTP, and tears it down automatically so automation never hangs. It still falls back to `pnpm install`/`uv sync --extra mypy` without `--frozen` if drift is detected and reminds you to reconcile the lockfiles so mypy stubs remain available for Husky hooks.
+
+On GCP we recommend storing the same variables in Secret Manager and mounting them into Cloud Run/Cloud Functions to avoid duplicating secrets per environment. After generating `.env`, mirror it to Secret Manager so automation stays DRY:
+
+```sh
+python3 scripts/sync_env_to_gcp.py --create
+```
+
+The sync helper writes the exact `.env` content documented above, enabling Cloud Build (see [`cloudbuild/smoke-test.yaml`](../cloudbuild/smoke-test.yaml)) and GitHub Actions to run the shared smoke test without redefining secrets.
+
 ## 🗂️ Documentation inventory
 
 | File | Purpose |
 | --- | --- |
-| [`README.md`](README.md) | High-level project overview and quickstart commands. |
-| [`docs/local-setup.md`](docs/local-setup.md) | Minimal smoke test to validate local installs using shared `.env` values and reproducible package managers. |
-| [`docs/llms.txt`](docs/llms.txt) | Checklist of LLM provider environment variables to keep in centralized secrets (locally via `.env`, in production via GCP Secret Manager). |
-| [`AGENTS.md`](AGENTS.md) | Guidance for AI contributors to keep workflows DRY and aligned with GCP deployment practices. |
+| [`README.md`](../README.md) | High-level project overview and quickstart commands. |
+| [`docs/local-setup.md`](../docs/local-setup.md) | Minimal smoke test to validate local installs using shared `.env` values and reproducible package managers. |
+| [`docs/llms.txt`](../docs/llms.txt) | Checklist of LLM provider environment variables to keep in centralized secrets (locally via `.env`, in production via GCP Secret Manager). |
+| [`AGENTS.md`](../AGENTS.md) | Guidance for AI contributors to keep workflows DRY and aligned with GCP deployment practices. |
 
 ### Development version
 
