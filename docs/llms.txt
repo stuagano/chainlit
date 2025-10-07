@@ -1,0 +1,14 @@
+Chainlit ships with adapters for multiple LLM providers. Keep provider credentials in your shared `.env` files and sync them to
+GCP Secret Manager so they can be mounted in Cloud Run, Cloud Functions, and Cloud Build without duplication.
+
+Recommended environment variables:
+- `OPENAI_API_KEY`
+- `GEMINI_API_KEY`
+- `VERTEX_PROJECT_ID`
+- `VERTEX_LOCATION`
+- `ANTHROPIC_API_KEY`
+- `AZURE_OPENAI_ENDPOINT`
+- `AZURE_OPENAI_KEY`
+
+Load these via tooling such as `direnv` or `dotenvx` locally. In production, attach the same secrets via Secret Manager or Config
+Connector to stay DRY across environments.
