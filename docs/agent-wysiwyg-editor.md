@@ -13,17 +13,26 @@ This document outlines a proposed approach for wrapping the ADK Web backend and 
 
 ## Editor UX Building Blocks
 
-### 1. Agent Definition Canvas
-- Modular panels for **System Prompt**, **Behaviors/Policies**, **Tools**, and **Deployment Targets**.
-- Each panel saves drafts to a versioned configuration document (e.g., Firestore, PostgreSQL, or Cloud SQL) via ADK Web APIs.
-- Provide inline linting using shared validation rules from the backend to keep behavior consistent (DRY).
+### 1. Agent Interaction Studio (implemented)
 
-### 2. Reusable Snippets Library
+The `/agent-editor` route now exposes a full-featured **Agent Interaction Studio**:
+
+- **Turn composer** – curate a list of agent turns, reorder them, duplicate drafts, and persist them locally (auto-saved to the key defined by `VITE_AGENT_EDITOR_STORAGE_KEY`).
+- **Rich text WYSIWYG** – craft scripted responses with bold, italics, lists, headings, and hyperlinks using a toolbar backed by a sanitized `contentEditable` surface.
+- **Metadata inputs** – capture the agent display name, runtime role, summary, and runtime variables (one per line). Variables are deduplicated and kept in sync with your shared config service.
+- **Preview pane** – renders the scripted Markdown/HTML using Chainlit's Markdown renderer so stakeholders can review the final conversational layout before promotion.
+- **Shared config hydration** – when `VITE_AGENT_EDITOR_API_BASE_URL` is set, the editor attempts to hydrate from your shared configuration service first, falling back to local drafts if the endpoint is unreachable.
+- **Import/export** – JSON import validates shape via `deserializeInteractions`, while export copies JSON to the clipboard and triggers a download for GitOps hand-off.
+- **Remote publish** – when `VITE_AGENT_EDITOR_REMOTE_PUBLISH_ENABLED=true`, a guarded **Publish to remote service** action pushes the current draft to the shared configuration API via `PUT /agent-interactions`. Customize the confirmation copy with `VITE_AGENT_EDITOR_REMOTE_PUBLISH_CONFIRMATION`.
+
+> ⚠️ Drafts remain in the browser. Promote only reviewed configurations by syncing them to a central database (Firestore, Cloud SQL, or your config registry) through automated pipelines.
+
+### 2. Reusable Snippets Library (roadmap)
 - Enable product teams to curate prompt snippets and tool templates stored in a central registry (`/shared/prompts/*.md`).
 - Editor references these snippets by ID; runtime resolves latest versions, ensuring updates propagate automatically.
 - Guardrails can be expressed in Markdown front matter (YAML) to declare required environment variables, IAM roles, or quotas.
 
-### 3. Scenario Testing Harness
+### 3. Scenario Testing Harness (roadmap)
 - Allow authors to define test cases in Markdown:
   ```markdown
   ---
@@ -38,10 +47,56 @@ This document outlines a proposed approach for wrapping the ADK Web backend and 
   ```
 - Editor triggers backend dry-run execution using recorded fixtures. Results surface inline with metrics and logs.
 
-### 4. Deployment Panel
+### 4. Deployment Panel (roadmap)
 - Surface target environments (e.g., `dev`, `staging`, `prod`) sourced from a centrally managed configuration service.
 - Require selection of a runtime version and config snapshot before enabling **Deploy to Agent Engine**.
 - Deployments invoke Cloud Build to package the agent bundle, push to Artifact Registry, and roll out to Cloud Run / GKE with blue-green or canary strategies.
+
+## Running the editor locally
+
+1. Create a `.env` file inside `frontend/` (or copy `.env.example`) and set the agent editor flags:
+   ```bash
+   cp frontend/.env.example frontend/.env
+   ```
+   Adjust values so they align with the shared configuration service you plan to use in higher environments.
+
+2. Start the frontend with pnpm:
+   ```bash
+   pnpm --filter @chainlit/app dev
+   ```
+   The app serves at `http://localhost:5173`. The agent editor lives at `http://localhost:5173/agent-editor`.
+
+3. Draft interactions, then use **Export JSON** to persist them to your configuration repo or API.
+4. (Optional) Hydrate from and publish to a shared configuration service by setting `VITE_AGENT_EDITOR_API_BASE_URL`. Leave `VITE_AGENT_EDITOR_REMOTE_PUBLISH_ENABLED=false` until you are ready to route publishes through CI/CD or a lower environment.
+
+## Deploying to Cloud Run
+
+To keep the workflow reproducible and DRY, use Cloud Build to build the frontend image and deploy to Cloud Run:
+
+1. **Build the container** (from repository root):
+   ```bash
+   gcloud builds submit \
+     --tag gcr.io/PROJECT_ID/chainlit-frontend:latest \
+     --config cloudbuild.yaml
+   ```
+   Ensure your `cloudbuild.yaml` pulls environment variables (like `VITE_AGENT_EDITOR_ENABLED`) from a centralized config source such as Config Connector or Cloud Build substitutions.
+
+2. **Deploy to Cloud Run**:
+   ```bash
+   gcloud run deploy chainlit-frontend \
+     --image gcr.io/PROJECT_ID/chainlit-frontend:latest \
+     --region REGION \
+     --platform managed \
+     --allow-unauthenticated \
+     --set-env-vars \
+      VITE_AGENT_EDITOR_ENABLED=true,\
+      VITE_AGENT_EDITOR_STORAGE_KEY=chainlit.agent-editor.draft,\
+      VITE_AGENT_EDITOR_API_BASE_URL=https://config.example.com,\
+      VITE_AGENT_EDITOR_REMOTE_PUBLISH_ENABLED=true
+  ```
+  Prefer referencing Secret Manager or Config Controller for secrets/IDs instead of inline literals. Cloud Run supports `--set-secrets` to mount Secret Manager versions directly, and Config Connector/Cloud Deploy can templatize `VITE_AGENT_EDITOR_API_BASE_URL` so every environment resolves the same service endpoint.
+
+3. **Enforce policy**: back the deployment with Cloud Deploy or Terraform to ensure every environment promotes the same container digest and `.env` values. This keeps the editor consistent across dev/staging/prod while maintaining compliance.
 
 ## Configuration & Secrets Management
 
@@ -59,6 +114,13 @@ This document outlines a proposed approach for wrapping the ADK Web backend and 
 | Runtime hosting | Cloud Run (serverless) or GKE (custom scaling) | Supports HTTPS, IAM auth, and monitoring. |
 | Observability | Cloud Logging, Cloud Monitoring, Error Reporting | Unified monitoring with dashboards/alerts. |
 | CI/CD | Cloud Build triggers or Cloud Deploy | Managed pipelines and progressive delivery. |
+
+## Remote Configuration Service Contract
+
+- **Endpoint expectations:** expose `GET /agent-interactions` and `PUT /agent-interactions` (or equivalent) behind IAM/IAP so the editor can hydrate drafts and push approved updates via `VITE_AGENT_EDITOR_API_BASE_URL`.
+- **Validation:** enforce schema checks server-side (Zod/pydantic) and reject missing variables, duplicate IDs, or unapproved runtime roles.
+- **Versioning & history:** persist previous revisions (Firestore document history, Cloud SQL audit tables) and surface change metadata for compliance reviews.
+- **GCP deployment:** host the service on Cloud Run with Workload Identity, storing secrets in Secret Manager and configuration in Firestore/Cloud SQL for DRY reuse across environments.
 
 ## Suggested Markdown Schema for Agent Instructions
 

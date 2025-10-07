@@ -1,6 +1,7 @@
 import getRouterBasename from '@/lib/router';
 import { Navigate, createBrowserRouter } from 'react-router-dom';
 
+import AgentEditor from 'pages/AgentEditor';
 import AuthCallback from 'pages/AuthCallback';
 import Element from 'pages/Element';
 import Env from 'pages/Env';
@@ -17,6 +18,10 @@ export const router = createBrowserRouter(
     {
       path: '/env',
       element: <Env />
+    },
+    {
+      path: '/agent-editor',
+      element: <AgentEditor />
     },
     {
       path: '/thread/:id?',
