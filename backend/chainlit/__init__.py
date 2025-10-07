@@ -121,6 +121,7 @@ __getattr__ = make_module_getattr(
         "LlamaIndexCallbackHandler": "chainlit.llama_index.callbacks",
         "instrument_openai": "chainlit.openai",
         "instrument_mistralai": "chainlit.mistralai",
+        "instrument_google_genai": "chainlit.google",
         "SemanticKernelFilter": "chainlit.semantic_kernel",
         "server": "chainlit.server",
     }
@@ -175,6 +176,7 @@ __all__ = [
     "input_widget",
     "instrument_mistralai",
     "instrument_openai",
+    "instrument_google_genai",
     "make_async",
     "oauth_callback",
     "on_app_shutdown",
