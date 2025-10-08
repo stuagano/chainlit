@@ -10,7 +10,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Dict, Iterable, List
+from typing import Dict, Iterable, List, Optional, Tuple
 
 if __package__ is None:  # pragma: no cover - executed when run as a script
     sys.path.append(str(Path(__file__).resolve().parents[1]))
@@ -20,6 +20,7 @@ from scripts._env import ENV_FILE, ENV_TEMPLATE, parse_env_file
 
 DEFAULT_PROJECT_ENV = "GCP_PROJECT_ID"
 DEFAULT_SECRET_ENV = "CHAINLIT_SECRET_NAME"
+DEFAULT_REPLICA_ENV = "GCP_SECRET_MANAGER_REPLICA_LOCATION"
 
 
 def _build_payload(
@@ -72,17 +73,58 @@ def _secret_exists(project: str, secret: str) -> bool:
     return result.returncode == 0
 
 
-def _create_secret(project: str, secret: str) -> None:
-    result = _run_gcloud(
-        [
-            "secrets",
-            "create",
-            secret,
-            "--project",
-            project,
-            "--replication-policy=automatic",
-        ]
-    )
+def _resolve_setting(
+    cli_value: Optional[str],
+    *,
+    candidate_keys: Iterable[str],
+    env_file_values: Dict[str, str],
+) -> Tuple[Optional[str], Optional[Tuple[str, str]]]:
+    """Determine the effective configuration value and where it came from."""
+
+    if cli_value:
+        return cli_value, None
+
+    for key in candidate_keys:
+        env_value = os.environ.get(key)
+        if env_value:
+            return env_value, ("env", key)
+
+        file_value = env_file_values.get(key, "")
+        if file_value:
+            return file_value, ("file", key)
+
+    return None, None
+
+
+def _log_source(name: str, source: Optional[Tuple[str, str]], source_path: Path) -> None:
+    if not source:
+        return
+
+    origin, key = source
+    if origin == "env":
+        print(f"Using {name} from environment variable {key}.")
+    elif origin == "file":
+        try:
+            relative = source_path.relative_to(REPO_ROOT)
+        except ValueError:
+            relative = source_path
+        print(f"Using {name} from {relative} entry {key}.")
+
+
+def _create_secret(project: str, secret: str, replica_location: str | None) -> None:
+    command = [
+        "secrets",
+        "create",
+        secret,
+        "--project",
+        project,
+    ]
+    if replica_location:
+        command.extend(["--replication-policy=user-managed", f"--locations={replica_location}"])
+    else:
+        command.append("--replication-policy=automatic")
+
+    result = _run_gcloud(command)
     if result.returncode != 0:
         raise SystemExit(f"Failed to create secret '{secret}' in project '{project}'.")
 
@@ -126,6 +168,14 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--replica-location",
+        default=None,
+        help=(
+            "Optional Secret Manager replica location (for example 'us'). "
+            f"Defaults to the environment variable {DEFAULT_REPLICA_ENV}. When omitted the secret uses automatic replication."
+        ),
+    )
+    parser.add_argument(
         "--source",
         type=Path,
         default=ENV_FILE,
@@ -151,22 +201,6 @@ def main() -> None:
     if shutil.which("gcloud") is None:
         raise SystemExit("gcloud CLI is required. Install it and authenticate before syncing secrets.")
 
-    project = (
-        args.project
-        or os.environ.get(DEFAULT_PROJECT_ENV)
-        or os.environ.get("VERTEX_PROJECT_ID")
-    )
-    if not project:
-        raise SystemExit(
-            "Set --project, GCP_PROJECT_ID, or VERTEX_PROJECT_ID so the script knows which project to target."
-        )
-
-    secret = args.secret or os.environ.get(DEFAULT_SECRET_ENV)
-    if not secret:
-        raise SystemExit(
-            "Set --secret or the CHAINLIT_SECRET_NAME environment variable to identify the Secret Manager entry."
-        )
-
     if not ENV_TEMPLATE.exists():
         raise SystemExit("Missing .env.example. Populate it before mirroring secrets to GCP.")
 
@@ -181,6 +215,35 @@ def main() -> None:
     env_values = parse_env_file(source_path)
     if not env_values:
         raise SystemExit(f"No key/value pairs found in {source_path}. Populate it before syncing to GCP.")
+
+    project, project_source = _resolve_setting(
+        args.project,
+        candidate_keys=(DEFAULT_PROJECT_ENV, "VERTEX_PROJECT_ID"),
+        env_file_values=env_values,
+    )
+    if not project:
+        raise SystemExit(
+            "Set --project, GCP_PROJECT_ID, or VERTEX_PROJECT_ID (for Vertex AI workloads) so the script knows which project to target."
+        )
+    _log_source("project", project_source, source_path)
+
+    secret, secret_source = _resolve_setting(
+        args.secret,
+        candidate_keys=(DEFAULT_SECRET_ENV,),
+        env_file_values=env_values,
+    )
+    if not secret:
+        raise SystemExit(
+            "Set --secret, CHAINLIT_SECRET_NAME, or define the key in your .env so the script can identify the Secret Manager entry."
+        )
+    _log_source("secret", secret_source, source_path)
+
+    replica_location, replica_source = _resolve_setting(
+        args.replica_location,
+        candidate_keys=(DEFAULT_REPLICA_ENV,),
+        env_file_values=env_values,
+    )
+    _log_source("replica location", replica_source, source_path)
 
     missing_required = [key for key in template_values if not env_values.get(key)]
     if missing_required and not args.include_empty:
@@ -205,7 +268,7 @@ def main() -> None:
             raise SystemExit(
                 f"Secret '{secret}' does not exist in project '{project}'. Pass --create to provision it automatically."
             )
-        _create_secret(project, secret)
+        _create_secret(project, secret, replica_location)
 
     with tempfile.NamedTemporaryFile("w", delete=False) as tmp:
         tmp.write("\n".join(payload_lines) + "\n")

@@ -1,6 +1,9 @@
 # Local Development Smoke Test
 
-This guide documents the minimal steps required to verify that Chainlit starts locally without any custom configuration.
+This guide documents the minimal steps required to verify that Chainlit starts locally without any custom configuration. For a
+complete inventory of supported environment variables, review the
+[environment variable checklist](./environment-variables.md) before wiring
+Chainlit to external services.
 
 ## Prerequisites
 
@@ -85,8 +88,12 @@ We recommend storing any credentials or API keys in a project-level `.env` file 
 
    The helper reads [`.env.example`](../.env.example) to determine which keys
    to upload, skips empty values by default, and provisions the secret when you
-   pass `--create`. Set `GCP_PROJECT_ID` and `CHAINLIT_SECRET_NAME` in `.env`
-   (or export them) to avoid repeating flags.
+   pass `--create`. Populate `GCP_PROJECT_ID`, `CHAINLIT_SECRET_NAME`, and (optionally)
+   `GCP_SECRET_MANAGER_REPLICA_LOCATION` in `.env` so local shells, CI, and Cloud Build all
+   reuse the same configuration without additional flags. If you already export those
+   variables (for example via `direnv`), the script will continue to honor them while
+   falling back to the shared `.env` for DRY defaults and user-managed replication settings
+   required by your data residency policy.
 
 ## Recommended Next Steps
 
