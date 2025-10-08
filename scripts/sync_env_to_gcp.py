@@ -4,9 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import os
-import shutil
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -17,6 +14,13 @@ if __package__ is None:  # pragma: no cover - executed when run as a script
 
 from scripts import REPO_ROOT
 from scripts._env import ENV_FILE, ENV_TEMPLATE, parse_env_file
+from scripts._gcp import (
+    PROJECT_ENV_CANDIDATES,
+    gcloud_available,
+    log_source,
+    resolve_setting,
+    run_gcloud,
+)
 
 DEFAULT_PROJECT_ENV = "GCP_PROJECT_ID"
 DEFAULT_SECRET_ENV = "CHAINLIT_SECRET_NAME"
@@ -44,21 +48,8 @@ def _build_payload(
             payload.append(f"{key}={value}")
 
     return payload
-
-
-def _run_gcloud(args: Iterable[str], *, capture_output: bool = False) -> subprocess.CompletedProcess:
-    command = ["gcloud", *args]
-    print(f"\n→ {' '.join(command)}")
-    return subprocess.run(
-        command,
-        check=False,
-        capture_output=capture_output,
-        text=True,
-    )
-
-
 def _secret_exists(project: str, secret: str) -> bool:
-    result = _run_gcloud(
+    result = run_gcloud(
         [
             "secrets",
             "describe",
@@ -124,13 +115,14 @@ def _create_secret(project: str, secret: str, replica_location: str | None) -> N
     else:
         command.append("--replication-policy=automatic")
 
+    result = run_gcloud(command)
     result = _run_gcloud(command)
     if result.returncode != 0:
         raise SystemExit(f"Failed to create secret '{secret}' in project '{project}'.")
 
 
 def _add_secret_version(project: str, secret: str, data_path: Path) -> None:
-    result = _run_gcloud(
+    result = run_gcloud(
         [
             "secrets",
             "versions",
@@ -216,6 +208,11 @@ def main() -> None:
     if not env_values:
         raise SystemExit(f"No key/value pairs found in {source_path}. Populate it before syncing to GCP.")
 
+    project, project_source = resolve_setting(
+        args.project,
+        candidate_keys=PROJECT_ENV_CANDIDATES,
+        env_file_values=env_values,
+        allow_gcloud_fallback=not args.dry_run,
     project, project_source = _resolve_setting(
         args.project,
         candidate_keys=(DEFAULT_PROJECT_ENV, "VERTEX_PROJECT_ID"),
@@ -225,6 +222,9 @@ def main() -> None:
         raise SystemExit(
             "Set --project, GCP_PROJECT_ID, or VERTEX_PROJECT_ID (for Vertex AI workloads) so the script knows which project to target."
         )
+    log_source("project", project_source, source_path)
+
+    secret, secret_source = resolve_setting(
     _log_source("project", project_source, source_path)
 
     secret, secret_source = _resolve_setting(
@@ -236,6 +236,9 @@ def main() -> None:
         raise SystemExit(
             "Set --secret, CHAINLIT_SECRET_NAME, or define the key in your .env so the script can identify the Secret Manager entry."
         )
+    log_source("secret", secret_source, source_path)
+
+    replica_location, replica_source = resolve_setting(
     _log_source("secret", secret_source, source_path)
 
     replica_location, replica_source = _resolve_setting(
@@ -243,6 +246,7 @@ def main() -> None:
         candidate_keys=(DEFAULT_REPLICA_ENV,),
         env_file_values=env_values,
     )
+    log_source("replica location", replica_source, source_path)
     _log_source("replica location", replica_source, source_path)
 
     missing_required = [key for key in template_values if not env_values.get(key)]
@@ -262,6 +266,9 @@ def main() -> None:
         print("\nDry run – payload that would be uploaded:\n")
         print("\n".join(payload_lines))
         return
+
+    if not gcloud_available():
+        raise SystemExit("gcloud CLI is required. Install it and authenticate before syncing secrets.")
 
     if not _secret_exists(project, secret):
         if not args.create:

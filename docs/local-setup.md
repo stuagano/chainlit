@@ -80,7 +80,15 @@ We recommend storing any credentials or API keys in a project-level `.env` file 
    finished. The smoke test helper shuts the process down for you.
 
 6. (Optional) Mirror the populated `.env` file to GCP Secret Manager so Cloud
-   Build and other environments reuse the same configuration:
+   Build and other environments reuse the same configuration. Run the project
+   alignment helper first to guarantee the Cloud SDK targets the same project
+   as your `.env`:
+
+   ```bash
+   python3 scripts/set_gcloud_project.py
+   ```
+
+   Then sync the secret payload:
 
    ```bash
    python3 scripts/sync_env_to_gcp.py --create
@@ -93,6 +101,11 @@ We recommend storing any credentials or API keys in a project-level `.env` file 
    reuse the same configuration without additional flags. If you already export those
    variables (for example via `direnv`), the script will continue to honor them while
    falling back to the shared `.env` for DRY defaults and user-managed replication settings
+   required by your data residency policy. When the `.env` and shell are both missing the
+   project ID, the helper now pulls the active `gcloud` configuration instead of failing once
+   [`scripts/set_gcloud_project.py`](../scripts/set_gcloud_project.py) establishes the shared
+   default, and `--dry-run` skips the Cloud SDK requirement entirely so you can preview payloads on fresh
+   machines before installing the CLI.
    required by your data residency policy.
 
 ## Recommended Next Steps
@@ -110,9 +123,10 @@ We recommend storing any credentials or API keys in a project-level `.env` file 
   CI resolve the same dependencies. When those commands fail, reconcile the
   lockfiles (or intentionally fall back) rather than committing ad-hoc
   upgrades.
-- **Bootstrap GCP credentials early**. Run `gcloud auth application-default login` and `gcloud config set project <project-id>` in
-  your local shell (or `.env`) so the hello app can reuse Application Default Credentials when you later connect it to managed
-  services. Keeping these values in `.env` makes it trivial to hydrate the same settings in Secret Manager or Config Connector.
+- **Bootstrap GCP credentials early**. Run `gcloud auth application-default login`, then
+  `python3 scripts/set_gcloud_project.py` so the Cloud SDK always targets the project stored in
+  `.env`. Keeping these values in `.env` makes it trivial to hydrate the same settings in Secret
+  Manager or Config Connector.
 - **Add continuous verification**. Wire the new smoke test into automation. We provide a reusable [GitHub Actions workflow](../.github/workflows/smoke-test.yaml) and a
   [Cloud Build configuration](../cloudbuild/smoke-test.yaml) so merges and nightly jobs exercise the same helper used by
   contributors. This catches lockfile or dependency regressions before they reach production environments.

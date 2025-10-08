@@ -75,6 +75,17 @@ all engineers share the same baseline.
 
 1. Copy `.env.example` to `.env` and populate the variables relevant to your
    deployment.
+2. Run `python3 scripts/set_gcloud_project.py` to keep the Cloud SDK aligned with
+   the project defined in `.env`. This guarantees local shells, automation, and
+   Cloud Build workers operate against the same project without hand-maintained
+   `gcloud config` calls.
+3. Run `python3 scripts/sync_env_to_gcp.py --create` to upload the populated
+   values to Secret Manager (`CHAINLIT_SECRET_NAME`). When the project ID is not
+   provided via flags or `.env`, the helper falls back to the active `gcloud`
+   configuration established by the previous step.
+4. Reference the secret from Cloud Build triggers or Cloud Run revisions instead
+   of re-declaring the variables manually.
+5. When credentials rotate, update `.env`, rerun the sync script, and redeploy
 2. Run `python3 scripts/sync_env_to_gcp.py --create` to upload the populated
    values to Secret Manager (`CHAINLIT_SECRET_NAME`).
 3. Reference the secret from Cloud Build triggers or Cloud Run revisions instead
@@ -123,3 +134,8 @@ steps:
 
 The example above hydrates the environment from Secret Manager at build time so
 Cloud Build, local shells, and production deployments remain synchronized.
+
+> **Preview without gcloud:** Use `--dry-run` to render the payload without
+> invoking the Secret Manager API or requiring the `gcloud` CLI. This is useful
+> when reviewing diffs locally or on contributors' machines that do not have
+> Cloud SDK installed yet.
