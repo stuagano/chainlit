@@ -106,6 +106,7 @@ We recommend storing any credentials or API keys in a project-level `.env` file 
    [`scripts/set_gcloud_project.py`](../scripts/set_gcloud_project.py) establishes the shared
    default, and `--dry-run` skips the Cloud SDK requirement entirely so you can preview payloads on fresh
    machines before installing the CLI.
+   required by your data residency policy.
 
 ## Recommended Next Steps
 

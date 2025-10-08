@@ -7,7 +7,7 @@ import argparse
 import sys
 import tempfile
 from pathlib import Path
-from typing import Dict, Iterable, List
+from typing import Dict, Iterable, List, Optional, Tuple
 
 if __package__ is None:  # pragma: no cover - executed when run as a script
     sys.path.append(str(Path(__file__).resolve().parents[1]))
@@ -64,6 +64,44 @@ def _secret_exists(project: str, secret: str) -> bool:
     return result.returncode == 0
 
 
+def _resolve_setting(
+    cli_value: Optional[str],
+    *,
+    candidate_keys: Iterable[str],
+    env_file_values: Dict[str, str],
+) -> Tuple[Optional[str], Optional[Tuple[str, str]]]:
+    """Determine the effective configuration value and where it came from."""
+
+    if cli_value:
+        return cli_value, None
+
+    for key in candidate_keys:
+        env_value = os.environ.get(key)
+        if env_value:
+            return env_value, ("env", key)
+
+        file_value = env_file_values.get(key, "")
+        if file_value:
+            return file_value, ("file", key)
+
+    return None, None
+
+
+def _log_source(name: str, source: Optional[Tuple[str, str]], source_path: Path) -> None:
+    if not source:
+        return
+
+    origin, key = source
+    if origin == "env":
+        print(f"Using {name} from environment variable {key}.")
+    elif origin == "file":
+        try:
+            relative = source_path.relative_to(REPO_ROOT)
+        except ValueError:
+            relative = source_path
+        print(f"Using {name} from {relative} entry {key}.")
+
+
 def _create_secret(project: str, secret: str, replica_location: str | None) -> None:
     command = [
         "secrets",
@@ -78,6 +116,7 @@ def _create_secret(project: str, secret: str, replica_location: str | None) -> N
         command.append("--replication-policy=automatic")
 
     result = run_gcloud(command)
+    result = _run_gcloud(command)
     if result.returncode != 0:
         raise SystemExit(f"Failed to create secret '{secret}' in project '{project}'.")
 
@@ -151,6 +190,9 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    if shutil.which("gcloud") is None:
+        raise SystemExit("gcloud CLI is required. Install it and authenticate before syncing secrets.")
+
     if not ENV_TEMPLATE.exists():
         raise SystemExit("Missing .env.example. Populate it before mirroring secrets to GCP.")
 
@@ -171,6 +213,10 @@ def main() -> None:
         candidate_keys=PROJECT_ENV_CANDIDATES,
         env_file_values=env_values,
         allow_gcloud_fallback=not args.dry_run,
+    project, project_source = _resolve_setting(
+        args.project,
+        candidate_keys=(DEFAULT_PROJECT_ENV, "VERTEX_PROJECT_ID"),
+        env_file_values=env_values,
     )
     if not project:
         raise SystemExit(
@@ -179,6 +225,9 @@ def main() -> None:
     log_source("project", project_source, source_path)
 
     secret, secret_source = resolve_setting(
+    _log_source("project", project_source, source_path)
+
+    secret, secret_source = _resolve_setting(
         args.secret,
         candidate_keys=(DEFAULT_SECRET_ENV,),
         env_file_values=env_values,
@@ -190,11 +239,15 @@ def main() -> None:
     log_source("secret", secret_source, source_path)
 
     replica_location, replica_source = resolve_setting(
+    _log_source("secret", secret_source, source_path)
+
+    replica_location, replica_source = _resolve_setting(
         args.replica_location,
         candidate_keys=(DEFAULT_REPLICA_ENV,),
         env_file_values=env_values,
     )
     log_source("replica location", replica_source, source_path)
+    _log_source("replica location", replica_source, source_path)
 
     missing_required = [key for key in template_values if not env_values.get(key)]
     if missing_required and not args.include_empty:

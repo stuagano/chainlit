@@ -86,6 +86,11 @@ all engineers share the same baseline.
 4. Reference the secret from Cloud Build triggers or Cloud Run revisions instead
    of re-declaring the variables manually.
 5. When credentials rotate, update `.env`, rerun the sync script, and redeploy
+2. Run `python3 scripts/sync_env_to_gcp.py --create` to upload the populated
+   values to Secret Manager (`CHAINLIT_SECRET_NAME`).
+3. Reference the secret from Cloud Build triggers or Cloud Run revisions instead
+   of re-declaring the variables manually.
+4. When credentials rotate, update `.env`, rerun the sync script, and redeploy
    so every environment receives the same update.
 
 This workflow keeps environment configuration DRY and aligns with GCP security
